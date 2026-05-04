@@ -27,12 +27,43 @@ import urllib.error
 GMS = os.environ["DH_GMS"].rstrip("/")
 TOKEN = os.environ["DH_TOKEN"]
 
+PG_URN = "urn:li:dataset:(urn:li:dataPlatform:postgres,defaultdb.public.{name},PROD)"
 KAFKA_URN = "urn:li:dataset:(urn:li:dataPlatform:kafka,webshop.public.{name},PROD)"
 CH_KE_URN = "urn:li:dataset:(urn:li:dataPlatform:clickhouse,service_kafka-1b5cb1e7.{name},PROD)"
 CH_MV_URN = "urn:li:dataset:(urn:li:dataPlatform:clickhouse,default.{name}_mv,PROD)"
 CH_TBL_URN = "urn:li:dataset:(urn:li:dataPlatform:clickhouse,default.{name},PROD)"
 
 TABLES = ("customers", "products", "orders", "order_items")
+
+# Source-of-truth column names per table for column-level lineage.
+# Kafka / CH copies of each table carry these columns plus the three
+# Debezium metadata fields (__op, __source_ts_ms, __deleted).
+PG_COLUMNS: dict[str, list[str]] = {
+    "customers":    ["id", "email", "name", "region", "country", "created_at", "updated_at"],
+    "products":     ["id", "sku", "name", "category", "price", "inventory", "created_at", "updated_at"],
+    "orders":       ["id", "customer_id", "status", "total", "region", "created_at", "updated_at"],
+    "order_items":  ["id", "order_id", "product_id", "quantity", "unit_price"],
+}
+DEBEZIUM_META_COLUMNS = ["__op", "__source_ts_ms", "__deleted"]
+
+
+def schema_field_urn(dataset_urn: str, field: str) -> str:
+    return f"urn:li:schemaField:({dataset_urn},{field})"
+
+
+def field_set_edges(upstream_urn: str, downstream_urn: str, columns: list[str]) -> list[dict]:
+    """Identity column-level edges for a 1:1 column-name-preserving hop."""
+    return [
+        {
+            "upstreamType": "FIELD_SET",
+            "upstreams": [schema_field_urn(upstream_urn, c)],
+            "downstreamType": "FIELD",
+            "downstreams": [schema_field_urn(downstream_urn, c)],
+            "transformOperation": "IDENTITY",
+            "confidenceScore": 1.0,
+        }
+        for c in columns
+    ]
 
 
 def http(method: str, path: str, body: dict) -> dict:
@@ -76,38 +107,54 @@ def ingest_aspect(entity_urn: str, aspect_name: str, aspect_value: dict) -> None
     post("/aspects?action=ingestProposal", body)
 
 
-# --- 1. Upstream lineage aspect on each downstream dataset ----------------
-
-EDGES: list[tuple[str, str]] = []
-for name in TABLES:
-    # (upstream, downstream)
-    EDGES.append((KAFKA_URN.format(name=name), CH_KE_URN.format(name=name)))
-    EDGES.append((CH_KE_URN.format(name=name), CH_MV_URN.format(name=name)))
-    EDGES.append((CH_MV_URN.format(name=name), CH_TBL_URN.format(name=name)))
+# --- 1. Dataset + column lineage on each downstream dataset ----------------
 
 now_ms = int(time.time() * 1000)
 actor = "urn:li:corpuser:datahub"
 
-# Group by downstream so we set one upstreamLineage aspect per node.
-by_downstream: dict[str, list[str]] = {}
-for upstream, downstream in EDGES:
-    by_downstream.setdefault(downstream, []).append(upstream)
+# Per-downstream description: (downstream URN, [(upstream URN, list of columns to map)])
+# Listing column maps per hop lets us emit fineGrainedLineages so DataHub renders
+# field-to-field arrows when the user clicks a column.
+lineage_plan: list[tuple[str, list[tuple[str, list[str]]]]] = []
+for name in TABLES:
+    pg = PG_URN.format(name=name)
+    kf = KAFKA_URN.format(name=name)
+    ke = CH_KE_URN.format(name=name)
+    mv = CH_MV_URN.format(name=name)
+    tb = CH_TBL_URN.format(name=name)
+    pg_cols = PG_COLUMNS[name]
+    full_cols = pg_cols + DEBEZIUM_META_COLUMNS  # Kafka / CH datasets carry both
 
-print(f"=== Lineage: writing upstreamLineage aspects for {len(by_downstream)} datasets ===")
-for downstream, upstreams in by_downstream.items():
-    aspect = {
-        "upstreams": [
+    # Hop 1: PG -> Kafka topic (Debezium adds the 3 metadata fields with no PG ancestor)
+    lineage_plan.append((kf, [(pg, pg_cols)]))
+    # Hop 2: Kafka topic -> CH Kafka engine table
+    lineage_plan.append((ke, [(kf, full_cols)]))
+    # Hop 3: CH Kafka engine table -> CH materialized view (identity SELECT)
+    lineage_plan.append((mv, [(ke, full_cols)]))
+    # Hop 4: CH materialized view -> CH ReplacingMergeTree storage table
+    lineage_plan.append((tb, [(mv, full_cols)]))
+
+print(f"=== Lineage: writing upstreamLineage (with fineGrainedLineages) for {len(lineage_plan)} datasets ===")
+for downstream, upstream_specs in lineage_plan:
+    fine_grained: list[dict] = []
+    upstream_records: list[dict] = []
+    for upstream_urn, cols in upstream_specs:
+        upstream_records.append(
             {
                 "auditStamp": {"time": now_ms, "actor": actor},
-                "dataset": u,
+                "dataset": upstream_urn,
                 "type": "TRANSFORMED",
             }
-            for u in upstreams
-        ]
+        )
+        fine_grained.extend(field_set_edges(upstream_urn, downstream, cols))
+
+    aspect = {
+        "upstreams": upstream_records,
+        "fineGrainedLineages": fine_grained,
     }
     print(f"  {downstream}")
-    for u in upstreams:
-        print(f"    <- {u}")
+    for upstream_urn, cols in upstream_specs:
+        print(f"    <- {upstream_urn}  ({len(cols)} column edges)")
     ingest_aspect(downstream, "upstreamLineage", aspect)
 
 
