@@ -30,14 +30,23 @@ Re-run it after every Connector Wizard ingestion (or whenever the lineage / sche
 
 Read-only sanity check. Prints one row per dataset with `UP / DOWN / SCHEMA` counts so you can verify the wiring at a glance.
 
+### `datahub_glossary.py`
+
+Idempotent. Pushes three things every run:
+
+1. **Glossary** — 1 root node (`Webstore`) with 4 sub-nodes (Business Entities, Attributes, Privacy, CDC Metadata) and 15 terms (Customer, Product, Order, OrderItem, Email, PersonalName, Region, Revenue, OrderStatus, SKU, Quantity, PII, DebeziumOp, SourceTimestamp, DeletionFlag).
+2. **Dataset descriptions + dataset-level term links** — for all 20 PG/Kafka/CH datasets, e.g. all 5 customer datasets carry the `Customer` term plus a friendly description.
+3. **Column descriptions + column-level term links** — every column on every dataset gets a description and, where applicable, term tags (e.g. `customers.email -> Email + PII`, `orders.total -> Revenue`, `__op -> DebeziumOp`).
+
 ## Usage
 
 ```bash
 export DH_GMS='https://<your-gms-host>:8080'   # the *-gms Aiven app
 export DH_TOKEN='<datahub PAT>'                # DataHub UI -> Settings -> Access Tokens
 
-python3 scripts/datahub_fix.py     # patch lineage + schemas
-python3 scripts/datahub_diag.py    # verify
+python3 scripts/datahub_fix.py        # lineage + Kafka topic schemas
+python3 scripts/datahub_glossary.py   # descriptions + glossary
+python3 scripts/datahub_diag.py       # verify
 ```
 
-Both scripts use only the Python stdlib, so no `pip install` needed.
+All three scripts use only the Python stdlib, so no `pip install` needed.
