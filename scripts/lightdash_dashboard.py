@@ -576,15 +576,33 @@ def all_chart_payloads() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Dashboard layout (12-column grid, h rows in 60px increments)
+# Dashboard layout
+#
+# Lightdash dashboards use a **36-column** react-grid-layout under the hood
+# (not the 12 you might assume from BI tool muscle memory). A tile with
+# w=3 will only fill 3/36 = 8% of the dashboard's visible width and leave a
+# big stripe of empty whitespace on the right. We author the layout below
+# in a 12-col mental model — easier to read and matches dbt/SQL grid
+# intuition — and the scaler below the table maps x and w from 12-col to
+# 36-col when emitting the API payload. Height stays as-is: rows are 60px
+# increments and unchanged between the two systems.
+
+LIGHTDASH_GRID_COLS = 36
+AUTHORED_GRID_COLS = 12
+GRID_SCALE = LIGHTDASH_GRID_COLS // AUTHORED_GRID_COLS  # 3
 
 
 def build_dashboard_payload(
     *, name: str, description: str, chart_uuids: dict[str, str]
 ) -> dict:
-    """Maps chart names -> tile placement on a 12-col / 5-row grid."""
+    """Maps chart names -> tile placement.
 
-    # (chart_name, x, y, w, h)
+    The layout list is authored in a 12-column mental model; the x and w
+    fields are scaled by ``GRID_SCALE`` (=3) so the resulting tiles fill
+    Lightdash's actual 36-column grid.
+    """
+
+    # (chart_name, x, y, w, h) — authored against a 12-column grid.
     layout: list[tuple[str, int, int, int, int]] = [
         # Row 1 — KPI tiles
         ("Total customers", 0, 0, 3, 3),
@@ -622,9 +640,10 @@ def build_dashboard_payload(
         tiles.append(
             {
                 "type": "saved_chart",
-                "x": x,
+                # 12-col -> 36-col mapping. Height passes through unscaled.
+                "x": x * GRID_SCALE,
                 "y": y,
-                "w": w,
+                "w": w * GRID_SCALE,
                 "h": h,
                 "properties": {
                     "savedChartUuid": uuid,
