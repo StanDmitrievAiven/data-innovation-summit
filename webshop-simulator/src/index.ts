@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 import { pool, withRetry } from "./db";
 import { ensureSchema } from "./schema";
+import { ensureMarketing } from "./marketing";
 import { runBackfill } from "./backfill";
 import { Simulator } from "./simulator";
 
@@ -12,6 +13,12 @@ async function main(): Promise<void> {
 
   await withRetry(() => ensureSchema());
   console.log("[boot] schema ready");
+
+  // Marketing reference data lives in PG but does not flow through CDC — it's
+  // read live from ClickHouse via the PG→CH service integration. The simulator
+  // bootstraps the schema + an evergreen seed once, then stays out of its way.
+  await withRetry(() => ensureMarketing());
+  console.log("[boot] marketing reference data ready");
 
   await runBackfill();
   console.log("[boot] backfill complete");

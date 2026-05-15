@@ -1,0 +1,27 @@
+{
+  "name": "ecommerce-cdc-source",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "postgres",
+    "database.dbname": "ecommerce",
+    "topic.prefix": "ecommerce",
+    "schema.include.list": "public",
+    "table.include.list": "public.users,public.products,public.orders,public.order_items,public.shipments",
+    "plugin.name": "pgoutput",
+    "slot.name": "ecommerce_slot",
+    "publication.name": "ecommerce_pub",
+    "snapshot.mode": "initial",
+    "transforms": "openlineage",
+    "transforms.openlineage.type": "io.aiven.kafka.connect.openlineage.OpenLineageSmt",
+    "transforms.openlineage.connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "transforms.openlineage.namespace": "ecommerce-cdc",
+    "transforms.openlineage.transport.config.path": "/opt/openlineage/openlineage.yml",
+    "transforms.openlineage.source.namespace": "postgres://ecommerce-db:5432",
+    "transforms.openlineage.source.dataset.database": "ecommerce",
+    "transforms.openlineage.source.dataset.prefix": "public",
+    "transforms.openlineage.kafka.bootstrap.servers": "kafka:9092"
+  }
+}

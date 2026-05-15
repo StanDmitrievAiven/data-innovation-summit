@@ -38,6 +38,32 @@ Idempotent. Pushes three things every run:
 2. **Dataset descriptions + dataset-level term links** — for all 20 PG/Kafka/CH datasets, e.g. all 5 customer datasets carry the `Customer` term plus a friendly description.
 3. **Column descriptions + column-level term links** — every column on every dataset gets a description and, where applicable, term tags (e.g. `customers.email -> Email + PII`, `orders.total -> Revenue`, `__op -> DebeziumOp`).
 
+### `dbt_render_compiled.py`
+
+Patches `target/manifest.json` (in `~/Documents/lightdash-dbt`) with manually-rendered `compiled_code` for each model. Needed because `dbt compile` requires a live ClickHouse connection (our service is VPC-bound), and the DataHub dbt source needs compiled SQL to derive column-level lineage from the model bodies.
+
+Pipeline:
+
+```bash
+cd ~/Documents/lightdash-dbt
+. .venv-dbt/bin/activate   # dbt-core + dbt-clickhouse
+DBT_PROFILES_DIR=$PWD CLICKHOUSE_HOST=dummy CLICKHOUSE_PASSWORD=dummy dbt parse
+python3 /Users/stan.dmitriev/Documents/DataInnovationSummitDemo/scripts/dbt_render_compiled.py
+# Then ingest into DataHub:
+cd /Users/stan.dmitriev/Documents/DataInnovationSummitDemo/datahub-lightdash-source
+. .venv/bin/activate
+datahub ingest -c recipes/dbt_aiven_demo.yml
+```
+
+After this lands you'll have:
+- 4 dbt source entities (sibling-linked to the CH base tables) with descriptions from `sources.yml`.
+- 3 dbt model entities (sibling-linked to the CH views) with column-level lineage to each source.
+- Roughly 20 `fineGrainedLineages` entries per non-trivial model — visible in the lineage explorer's column view.
+
+### `datahub_emit_view_lineage.py`
+
+Superseded by the dbt ingestion above (which gives richer, more accurate lineage). Kept as a fallback for environments where dbt isn't available — it pulls each view's DDL from ClickHouse via the Lightdash SQL Runner tunnel, parses with sqlglot, and emits `upstreamLineage` directly on the ClickHouse-platform URNs.
+
 ## Usage
 
 ```bash

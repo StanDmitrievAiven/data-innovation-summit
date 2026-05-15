@@ -1,0 +1,27 @@
+{
+  "name": "search-sync-sink",
+  "config": {
+    "connector.class": "io.debezium.connector.jdbc.JdbcSinkConnector",
+    "connection.url": "jdbc:postgresql://postgres:5432/search_index",
+    "connection.username": "postgres",
+    "connection.password": "postgres",
+    "topics": "ecommerce.public.users,ecommerce.public.products,ecommerce.public.orders,ecommerce.public.order_items,ecommerce.public.shipments",
+    "schema.evolution": "basic",
+    "insert.mode": "insert",
+    "primary.key.mode": "none",
+    "table.name.format": "${topic}",
+    "transforms": "unwrap,openlineage,route",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.drop.tombstones": "true",
+    "transforms.openlineage.type": "io.aiven.kafka.connect.openlineage.OpenLineageSmt",
+    "transforms.openlineage.connector.class": "io.debezium.connector.jdbc.JdbcSinkConnector",
+    "transforms.openlineage.namespace": "search-sync",
+    "transforms.openlineage.transport.config.path": "/opt/openlineage/openlineage.yml",
+    "transforms.openlineage.sink.namespace": "postgres://search-index:5432",
+    "transforms.openlineage.sink.dataset.database": "search_index",
+    "transforms.openlineage.kafka.bootstrap.servers": "kafka:9092",
+    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.route.regex": "ecommerce\\.public\\.(.*)",
+    "transforms.route.replacement": "$1"
+  }
+}

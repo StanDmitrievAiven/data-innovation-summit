@@ -1,0 +1,17 @@
+{
+  "name": "analytics-warehouse-sink",
+  "config": {
+    "connector.class": "io.debezium.connector.jdbc.JdbcSinkConnector",
+    "connection.url": "jdbc:postgresql://postgres:5432/analytics_staging",
+    "connection.username": "postgres",
+    "connection.password": "postgres",
+    "topics": "ecommerce.public.users,ecommerce.public.products,ecommerce.public.orders,ecommerce.public.order_items,ecommerce.public.shipments",
+    "schema.evolution": "basic",
+    "insert.mode": "insert",
+    "primary.key.mode": "none",
+    "table.name.format": "${topic}",
+    "transforms": "unwrap",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.drop.tombstones": "true"
+  }
+}

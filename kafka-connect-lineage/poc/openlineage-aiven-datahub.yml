@@ -1,0 +1,13 @@
+# OpenLineage transport config pointing at an Aiven-managed DataHub instance.
+#
+# Replace DATAHUB_GMS_URL with the actual GMS URL from your Aiven DataHub service.
+# You can find it via: avn service get <datahub-service> --json | jq '.service_uri'
+#
+# If auth is required, add:
+#   auth:
+#     type: api_key
+#     api_key: <your-datahub-personal-access-token>
+transport:
+  type: http
+  url: DATAHUB_GMS_URL
+  endpoint: openapi/openlineage/api/v1/lineage

@@ -1,0 +1,44 @@
+# Lightdash → DataHub ingestion recipe for the Data Innovation Summit demo.
+#
+# Wires the live Lightdash app (running on Aiven Apps) into the Aiven for
+# DataHub instance, joining chart lineage onto the existing ClickHouse
+# datasets already ingested via the dedicated ClickHouse source.
+#
+# Run with:
+#   export LIGHTDASH_PAT='ldpat_...'
+#   export DATAHUB_GMS_URL='https://...8080.eur-1.aiven.app'
+#   export DATAHUB_TOKEN='ey...'
+#   datahub ingest -c recipes/lightdash_aiven_demo.yml
+
+source:
+  type: lightdash
+  config:
+    connection:
+      base_url: https://019e0171-79d5-775d-b84a-9b12dcd1ed50-8080.eur-1.aiven.app
+      personal_access_token: ${LIGHTDASH_PAT}
+
+    # The existing ClickHouse source already emits datasets as
+    #   urn:li:dataset:(urn:li:dataPlatform:clickhouse,<schema>.<table>,PROD)
+    # so we use the same platform name + no platform_instance for chart inputs.
+    warehouse_platform: clickhouse
+    env: PROD
+
+    extract_owners: true
+    extract_lineage: true
+    include_organization_container: false
+
+    stateful_ingestion:
+      enabled: true
+      remove_stale_metadata: true
+
+sink:
+  type: datahub-rest
+  config:
+    # Aiven for DataHub GMS URL (datahub-1c8ec127-gms component).
+    server: ${DATAHUB_GMS_URL}
+    token: ${DATAHUB_TOKEN}
+    # ``mode: SYNC_PRIMARY`` is faster but ASYNC keeps DataHub responsive
+    # while we push 100+ aspects through.
+    mode: ASYNC
+
+pipeline_name: lightdash-demo

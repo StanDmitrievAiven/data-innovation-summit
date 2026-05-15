@@ -1,0 +1,28 @@
+{
+  "name": "staging-cdc-source",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "postgres",
+    "database.dbname": "analytics_staging",
+    "topic.prefix": "staging",
+    "schema.include.list": "public",
+    "table.include.list": "public.users,public.products,public.orders,public.order_items,public.shipments",
+    "plugin.name": "pgoutput",
+    "slot.name": "staging_slot",
+    "publication.name": "staging_pub",
+    "publication.autocreate.mode": "all_tables",
+    "snapshot.mode": "initial",
+    "transforms": "openlineage",
+    "transforms.openlineage.type": "io.aiven.kafka.connect.openlineage.OpenLineageSmt",
+    "transforms.openlineage.connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "transforms.openlineage.namespace": "staging-cdc",
+    "transforms.openlineage.transport.config.path": "/opt/openlineage/openlineage.yml",
+    "transforms.openlineage.source.namespace": "postgres://analytics-staging:5432",
+    "transforms.openlineage.source.dataset.database": "analytics_staging",
+    "transforms.openlineage.source.dataset.prefix": "public",
+    "transforms.openlineage.kafka.bootstrap.servers": "kafka:9092"
+  }
+}

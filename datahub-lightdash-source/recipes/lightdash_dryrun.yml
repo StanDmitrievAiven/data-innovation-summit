@@ -1,0 +1,20 @@
+# Dry-run recipe — fetches live Lightdash metadata but writes to a local JSON
+# file rather than DataHub GMS. Useful for inspecting workunits before shipping.
+
+source:
+  type: lightdash
+  config:
+    connection:
+      base_url: https://019e0171-79d5-775d-b84a-9b12dcd1ed50-8080.eur-1.aiven.app
+      personal_access_token: ${LIGHTDASH_PAT}
+    warehouse_platform: clickhouse
+    env: PROD
+    extract_owners: true
+    extract_lineage: true
+
+sink:
+  type: file
+  config:
+    filename: ./out_dryrun.json
+
+pipeline_name: lightdash-dryrun

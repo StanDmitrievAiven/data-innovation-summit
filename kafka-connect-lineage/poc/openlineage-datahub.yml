@@ -1,0 +1,6 @@
+# OpenLineage transport config for the local DataHub demo.
+# The SMT reads this file to know where to send lineage events.
+transport:
+  type: http
+  url: http://datahub-gms:8080
+  endpoint: openapi/openlineage/api/v1/lineage
