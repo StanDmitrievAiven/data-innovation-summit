@@ -41,6 +41,22 @@ import { ch } from "./db";
  */
 const PG_FEDERATED_DB = "service_pg-37c7de3b_defaultdb_marketing";
 
+/**
+ * Read-only ClickHouse user the Aiven for DataHub managed ClickHouse
+ * ingestion runs as. It's granted SELECT on every database DataHub is
+ * supposed to crawl; new federated databases (e.g. this PG → CH one)
+ * aren't covered by the wizard's initial grant set, so we top it up
+ * from inside the VPC where dashboard-api already has admin creds.
+ *
+ * Idempotent: ClickHouse's GRANT is "add" semantics and silently
+ * succeeds if the user already has the privilege.
+ */
+const DATAHUB_RO_USER = "datahub_ro_bf817004";
+
+const GRANT_STATEMENTS: string[] = [
+  `GRANT SELECT ON \`${PG_FEDERATED_DB}\`.* TO ${DATAHUB_RO_USER}`,
+];
+
 interface ViewDef {
   name: string;
   sql: string;
@@ -110,6 +126,20 @@ const VIEWS: ViewDef[] = [
 ];
 
 export async function ensureWarehouseViews(): Promise<void> {
+  // Grants run before view DDL so DataHub's read-only user has a fresh
+  // chance to see new federated databases on every boot.
+  for (const stmt of GRANT_STATEMENTS) {
+    try {
+      await ch.exec({ query: stmt });
+      console.log(`[views] grant ok: ${stmt}`);
+    } catch (err) {
+      // Same boot-must-succeed philosophy as the view DDL below: log and
+      // continue. The DataHub crawl will simply miss the new federated
+      // tables until the grant lands.
+      console.error(`[views] grant failed:`, (err as Error).message);
+    }
+  }
+
   for (const v of VIEWS) {
     try {
       await ch.exec({ query: v.sql });

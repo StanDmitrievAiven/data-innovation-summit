@@ -66,13 +66,23 @@ def render(raw_code: str, node_db: str | None) -> str:
     )
     sql = RE_REF.sub(lambda m: f"{target_schema}.{m.group('ref_name')}", sql)
 
-    # Source uses ``default`` for every base table, but the macro syntax
-    # `source('webstore', 'X')` would produce ``webstore.X`` — we want
-    # ``default.X``. Override the schema for the ``webstore`` source.
-    sql = sql.replace("webstore.customers", f"{TARGET_SCHEMA}.customers")
-    sql = sql.replace("webstore.products", f"{TARGET_SCHEMA}.products")
-    sql = sql.replace("webstore.orders", f"{TARGET_SCHEMA}.orders")
-    sql = sql.replace("webstore.order_items", f"{TARGET_SCHEMA}.order_items")
+    # Each source's logical name (e.g. "webstore") differs from the
+    # ClickHouse database that physically holds the data. Rewrite the
+    # rendered `<source>.<table>` references to point at the real CH
+    # database name so downstream sql-parsing (in DataHub) lines up
+    # exactly with what ClickHouse executes.
+
+    # webstore source: CDC-fed gold tables in the ClickHouse `default` db.
+    for tbl in ("customers", "products", "orders", "order_items"):
+        sql = sql.replace(f"webstore.{tbl}", f"{TARGET_SCHEMA}.{tbl}")
+
+    # marketing source: federated database created by the Aiven
+    # PostgreSQL → ClickHouse service integration. The name follows
+    # the documented Aiven convention `service_<pg>_<db>_<schema>`.
+    MARKETING_FEDERATED_DB = "service_pg-37c7de3b_defaultdb_marketing"
+    sql = sql.replace(
+        "marketing.campaigns", f"`{MARKETING_FEDERATED_DB}`.campaigns"
+    )
 
     leftover = RE_ANY_JINJA.search(sql)
     if leftover:

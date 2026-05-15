@@ -91,6 +91,7 @@ class LightdashClient:
 ORDERS = "orders_enriched"
 CUSTOMERS = "customers_clean"
 PRODUCTS = "products_catalog"
+CAMPAIGNS = "orders_with_campaign"
 
 
 def f(table: str, name: str) -> str:
@@ -496,6 +497,81 @@ def all_chart_payloads() -> list[dict]:
         )
     )
 
+    # ── Campaign attribution row ──────────────────────────────────────────
+    # These three charts read from `orders_with_campaign`, the dbt model
+    # that LEFT ANY JOINs orders_enriched against the federated PostgreSQL
+    # `marketing.campaigns` table (read live via the Aiven PG → CH service
+    # integration). They demonstrate the demo's second integration pattern:
+    # slowly-changing reference data joined live to CDC-streamed events.
+
+    charts.append(
+        horizontal_bar_chart(
+            name="Revenue by campaign (top 10)",
+            description=(
+                "Total revenue attributed to each marketing campaign, joined "
+                "from `marketing.campaigns` in PostgreSQL via the Aiven "
+                "PostgreSQL → ClickHouse service integration. The 'null' "
+                "bucket is revenue with no active campaign coverage."
+            ),
+            table=CAMPAIGNS,
+            category=f(CAMPAIGNS, "campaign_name"),
+            metric=f(CAMPAIGNS, "total_revenue"),
+            extra_dims=[f(CAMPAIGNS, "campaign_channel")],
+            limit=10,
+        )
+    )
+
+    charts.append(
+        cartesian_chart(
+            name="Attributed vs organic revenue",
+            description=(
+                "Splits total revenue by whether the order fell inside an "
+                "active campaign window. Uses the `attributed_revenue_eur` "
+                "and `organic_revenue_eur` metrics defined on the "
+                "orders_with_campaign explore."
+            ),
+            table=CAMPAIGNS,
+            x=f(CAMPAIGNS, "order_region"),
+            ys=[
+                f(CAMPAIGNS, "attributed_revenue_eur"),
+                f(CAMPAIGNS, "organic_revenue_eur"),
+            ],
+            chart_type="bar",
+            stack=True,
+            sorts=[{"fieldId": f(CAMPAIGNS, "order_region"), "descending": False}],
+            limit=20,
+        )
+    )
+
+    charts.append(
+        table_chart(
+            name="Campaign performance",
+            description=(
+                "One row per campaign: channel, region, dates, budget, "
+                "attributed revenue and ROI. The ROI metric is "
+                "attributed_revenue_eur / campaign_budget_eur — most "
+                "meaningful when sliced to a single campaign."
+            ),
+            table=CAMPAIGNS,
+            dimensions=[
+                f(CAMPAIGNS, "campaign_name"),
+                f(CAMPAIGNS, "campaign_region"),
+                f(CAMPAIGNS, "campaign_channel"),
+                f(CAMPAIGNS, "campaign_status"),
+                f(CAMPAIGNS, "campaign_start_date"),
+                f(CAMPAIGNS, "campaign_end_date"),
+                f(CAMPAIGNS, "campaign_budget_eur"),
+            ],
+            metrics=[
+                f(CAMPAIGNS, "attributed_revenue_eur"),
+                f(CAMPAIGNS, "order_count"),
+                f(CAMPAIGNS, "campaign_roi"),
+            ],
+            sorts=[{"fieldId": f(CAMPAIGNS, "attributed_revenue_eur"), "descending": True}],
+            limit=50,
+        )
+    )
+
     return charts
 
 
@@ -528,6 +604,13 @@ def build_dashboard_payload(
         # Row 5 — tables
         ("Region summary", 0, 18, 6, 5),
         ("Live orders", 6, 18, 6, 5),
+        # Row 6 — marketing-campaign attribution (federated PG→CH read).
+        # These three tiles are the visible payoff for the new federated
+        # integration pattern.
+        ("Revenue by campaign (top 10)", 0, 23, 6, 5),
+        ("Attributed vs organic revenue", 6, 23, 6, 5),
+        # Row 7 — wide campaign-performance table spans the row.
+        ("Campaign performance", 0, 28, 12, 5),
     ]
 
     tiles = []
