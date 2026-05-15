@@ -309,8 +309,9 @@ const INSERT_SQL = `
     (name, region, country, channel, start_date, end_date,
      discount_pct, budget_eur, target_revenue_eur, status, description)
   VALUES
-    ($1, $2, $3, $4, current_date + ($5 || ' days')::interval,
-                     current_date + (($5 + $6) || ' days')::interval,
+    ($1, $2, $3, $4,
+     current_date + ($5::int * interval '1 day'),
+     current_date + (($5::int + $6::int) * interval '1 day'),
      $7, $8, $9, $10, $11)
   ON CONFLICT (name) DO NOTHING
   RETURNING id
