@@ -48,38 +48,63 @@ interface ViewDef {
 
 const VIEWS: ViewDef[] = [
   {
+    // Mirror of the orders_with_campaign dbt model in lightdash-dbt. Keep
+    // the two in sync — same join shape, same projected columns.
+    //
+    // ClickHouse needs at least one equality predicate to pick join keys,
+    // so we can't write `LIKE … OR region='GLOBAL'` directly. The
+    // campaigns CTE explodes each row to one (campaign, match_region)
+    // tuple per region it targets (GLOBAL fans out to all four), then we
+    // equi-join the order's region prefix (EMEA-FR → EMEA) against
+    // match_region. LEFT ANY JOIN keeps grain at one row per order line
+    // even when several campaigns overlap.
     name: "default.orders_with_campaign",
     sql: `
       CREATE OR REPLACE VIEW default.orders_with_campaign AS
+      WITH campaigns AS (
+          SELECT
+              id                              AS campaign_id,
+              name                            AS campaign_name,
+              channel                         AS campaign_channel,
+              region                          AS campaign_region,
+              country                         AS campaign_country,
+              toFloat64(discount_pct)         AS campaign_discount_pct,
+              toFloat64(budget_eur)           AS campaign_budget_eur,
+              toFloat64(target_revenue_eur)   AS campaign_target_revenue_eur,
+              status                          AS campaign_status,
+              start_date                      AS campaign_start_date,
+              end_date                        AS campaign_end_date,
+              description                     AS campaign_description,
+              arrayJoin(
+                  if(region = 'GLOBAL', ['EMEA', 'AMER', 'APAC', 'LATAM'], [region])
+              )                               AS match_region
+          FROM \`${PG_FEDERATED_DB}\`.campaigns
+      ),
+      enriched AS (
+          SELECT
+              e.*,
+              splitByChar('-', e.order_region)[1] AS order_region_prefix
+          FROM default.orders_enriched AS e
+      )
       SELECT
-          o.id                                       AS order_id,
-          o.created_at                               AS order_created_at,
-          o.region                                   AS order_region,
-          o.status                                   AS order_status,
-          o.total                                    AS order_total,
-          o.customer_id                              AS customer_id,
-          c.id                                       AS campaign_id,
-          c.name                                     AS campaign_name,
-          c.channel                                  AS campaign_channel,
-          c.region                                   AS campaign_region,
-          c.country                                  AS campaign_country,
-          c.discount_pct                             AS campaign_discount_pct,
-          c.budget_eur                               AS campaign_budget_eur,
-          c.target_revenue_eur                       AS campaign_target_revenue_eur,
-          c.status                                   AS campaign_status,
-          c.start_date                               AS campaign_start_date,
-          c.end_date                                 AS campaign_end_date,
-          (c.id IS NOT NULL)                         AS in_campaign
-      FROM default.orders_enriched AS o
-      LEFT JOIN \`${PG_FEDERATED_DB}\`.campaigns AS c
-        ON (
-              -- Region-targeted campaign (e.g. EMEA, AMER) — match the region
-              -- prefix that orders carry (e.g. EMEA-FR matches an EMEA campaign).
-              o.region LIKE concat(c.region, '%')
-              -- ...or a GLOBAL campaign matches every order regardless of region.
-              OR c.region = 'GLOBAL'
-           )
-       AND toDate(o.created_at) BETWEEN c.start_date AND c.end_date
+          e.* EXCEPT (order_region_prefix),
+          c.campaign_id,
+          c.campaign_name,
+          c.campaign_channel,
+          c.campaign_region,
+          c.campaign_country,
+          c.campaign_discount_pct,
+          c.campaign_budget_eur,
+          c.campaign_target_revenue_eur,
+          c.campaign_status,
+          c.campaign_start_date,
+          c.campaign_end_date,
+          c.campaign_description,
+          (c.campaign_id IS NOT NULL) AS in_campaign
+      FROM enriched AS e
+      LEFT ANY JOIN campaigns AS c
+        ON e.order_region_prefix = c.match_region
+       AND e.order_created_date BETWEEN c.campaign_start_date AND c.campaign_end_date
     `.trim(),
   },
 ];
