@@ -240,4 +240,49 @@ for table, fields in KAFKA_FIELDS.items():
     print(f"  -> {urn}  ({len(fields)} fields)")
     ingest_aspect(urn, "schemaMetadata", schema)
 
+# --- 3. PostgreSQL -> ClickHouse federated lineage (marketing.campaigns) ---
+#
+# Mirrors hop 1 above for the second integration pattern in the demo: the
+# Aiven PostgreSQL -> ClickHouse service integration. Where the CDC path
+# uses Kafka + a 4-hop materialization, the federated read is a single
+# hop where ClickHouse re-uses the PostgreSQL columns as-is at query
+# time. We declare an identity column map for each of the 14 columns so
+# the DataHub UI renders proper field-to-field arrows.
+
+PG_MARKETING_URN = (
+    "urn:li:dataset:(urn:li:dataPlatform:postgres,"
+    "defaultdb.marketing.campaigns,PROD)"
+)
+CH_MARKETING_URN = (
+    "urn:li:dataset:(urn:li:dataPlatform:clickhouse,"
+    "service_pg-37c7de3b_defaultdb_marketing.campaigns,PROD)"
+)
+MARKETING_COLUMNS = [
+    "id", "name", "region", "country", "channel",
+    "start_date", "end_date", "discount_pct", "budget_eur",
+    "target_revenue_eur", "status", "description",
+    "created_at", "updated_at",
+]
+
+print(
+    f"\n=== Federated PG -> CH lineage: writing upstreamLineage on "
+    f"{CH_MARKETING_URN.split(',')[1]} ==="
+)
+fed_aspect = {
+    "upstreams": [
+        {
+            "auditStamp": {"time": now_ms, "actor": actor},
+            "dataset": PG_MARKETING_URN,
+            "type": "COPY",
+        }
+    ],
+    "fineGrainedLineages": field_set_edges(
+        PG_MARKETING_URN, CH_MARKETING_URN, MARKETING_COLUMNS
+    ),
+}
+print(f"  {CH_MARKETING_URN}")
+print(f"    <- {PG_MARKETING_URN}  ({len(MARKETING_COLUMNS)} column edges)")
+ingest_aspect(CH_MARKETING_URN, "upstreamLineage", fed_aspect)
+
+
 print("\nAll aspects written. Re-run scripts/datahub_diag.py to verify.")
