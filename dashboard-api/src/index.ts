@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { query } from "./db";
+import { ensureWarehouseViews } from "./views";
 import {
   CATEGORY_REVENUE,
   LIVE_ORDERS,
@@ -26,6 +27,14 @@ function asString(v: unknown, fallback: string): string {
 }
 
 async function main() {
+  // Bootstrap derived ClickHouse views before serving traffic. dashboard-api
+  // is the only thing in the VPC that has both ClickHouse credentials and
+  // its own startup hook, so it doubles as the warehouse view materialiser:
+  // the dbt project (lightdash-dbt) is the source of truth for definitions,
+  // and this step keeps the live CH views in sync. Idempotent — re-runs every
+  // deploy and skips any view that's already up to date.
+  await ensureWarehouseViews();
+
   const app = express();
   app.use(cors());
   app.use(express.json());
