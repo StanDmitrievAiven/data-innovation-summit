@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Data Innovation Summit</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --ink: #eef3ff;
+        --muted: #9aabc8;
+        --line: rgba(186, 210, 255, 0.18);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: #070b14; overflow: hidden; }
+      body { font-family: system-ui, sans-serif; color: var(--ink); }
+      canvas { display: block; }
+      .hud {
+        position: fixed;
+        z-index: 2;
+        pointer-events: none;
+        left: 28px;
+        right: 28px;
+      }
+      .top { top: 24px; display: flex; justify-content: space-between; gap: 24px; }
+      .brand h1 {
+        margin: 6px 0 0;
+        font-size: clamp(28px, 4vw, 52px);
+        letter-spacing: -0.04em;
+        font-weight: 620;
+      }
+      .kicker, .meta, .hint {
+        margin: 0;
+        color: var(--muted);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-size: 12px;
+      }
+      .bottom {
+        bottom: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 24px;
+      }
+      .stat {
+        border: 1px solid var(--line);
+        background: rgba(7, 11, 20, 0.55);
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        padding: 14px 16px 12px;
+        min-width: 180px;
+      }
+      .stat strong {
+        display: block;
+        margin-top: 4px;
+        font-size: 28px;
+        letter-spacing: -0.04em;
+        font-variant-numeric: tabular-nums;
+      }
+      .nodes { display: flex; gap: 18px; flex-wrap: wrap; }
+      .node { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+      .dot { width: 8px; height: 8px; border-radius: 99px; }
+    </style>
+  </head>
+  <body>
+    <div class="hud top">
+      <div class="brand">
+        <p class="kicker">Aiven · one platform</p>
+        <h1>Data Innovation Summit</h1>
+      </div>
+      <p class="meta">aws-eu-west-1</p>
+    </div>
+    <div class="hud bottom">
+      <div class="stat">
+        <p class="kicker">Streaming</p>
+        <strong id="rate">0</strong>
+      </div>
+      <div>
+        <div class="nodes">
+          <span class="node"><i class="dot" style="background:#60a5fa"></i>PostgreSQL</span>
+          <span class="node"><i class="dot" style="background:#fb923c"></i>Kafka</span>
+          <span class="node"><i class="dot" style="background:#fde047"></i>ClickHouse</span>
+          <span class="node"><i class="dot" style="background:#22d3ee"></i>DataHub</span>
+        </div>
+        <p class="hint" style="margin-top:10px">Drag to orbit · scroll to zoom</p>
+      </div>
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
